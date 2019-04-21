@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Steam</title>
+</head>
+<body>
+<video id="v1" height="120" width="160" autoplay muted></video>
+<script>
+    const ws = new WebSocket("ws://localhost:8080/stream");
+    ws.onmessage = function (message) {
+        const desc = new RTCSessionDescription({ type:"answer", sdp:message.data });
+        pc.setRemoteDescription(desc)
+    };
+
+    const pc = new RTCPeerConnection({});
+    pc.onicecandidate = e => {
+        if (e.candidate) return;
+        ws.send(pc.localDescription.sdp);
+    };
+
+    const camera = navigator.mediaDevices.getUserMedia({video: true, audio: false})
+        .then(stream => pc.addStream(v1.srcObject = stream))
+        .then(() => pc.createOffer())
+        .then(desc => pc.setLocalDescription(desc));
+
+</script>
+</body>
+</html>

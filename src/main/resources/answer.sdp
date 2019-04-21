@@ -1,0 +1,23 @@
+v=0
+o=mozilla...THIS_IS_SDPARTA-66.0.1 6086813541141056210 0 IN IP4 0.0.0.0
+s=-
+t=0 0
+a=group:BUNDLE 0
+a=msid-semantic:WMS *
+m=video 51941 UDP/TLS/RTP/SAVPF 96
+c=IN IP4 80.249.92.127
+a=ice-options:trickle
+a=recvonly
+a=setup:passive
+a=extmap:2 urn:ietf:params:rtp-hdrext:toffset
+a=extmap:3 http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time
+a=extmap:9 urn:ietf:params:rtp-hdrext:sdes:mid
+a=fmtp:96 max-fs=12288;max-fr=60
+a=mid:0
+a=msid:{9e678a70-47fc-5841-968c-30fbb3dae2d6} {4a04701b-c272-2a4f-9f3a-adbde1339dd6}
+a=rtcp-fb:96 nack
+a=rtcp-fb:96 nack pli
+a=rtcp-fb:96 ccm fir
+a=rtcp-fb:96 goog-remb
+a=rtcp-mux
+a=rtpmap:96 VP8/90000

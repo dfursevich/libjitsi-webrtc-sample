@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Watch</title>
+</head>
+<body>
+<video id="v1" height="120" width="160" muted autoplay></video>
+<script>
+    const pc = new RTCPeerConnection({});
+
+    pc.ontrack = e => {
+        v1.srcObject = e.streams[0];
+        v1.play();
+    };
+
+    const ws = new WebSocket("ws://localhost:8080/watch");
+    ws.onmessage = function (message) {
+        const desc = new RTCSessionDescription({ type:"offer", sdp:message.data });
+        pc.setRemoteDescription(desc)
+            .then(() => pc.createAnswer()).then(d => pc.setLocalDescription(d))
+            .catch(failed);
+        pc.onicecandidate = e => {
+            if (e.candidate) return;
+            ws.send(pc.localDescription.sdp);
+        };
+
+    };
+
+    var failed = e => log(e);
+</script>
+</body>
+</html>

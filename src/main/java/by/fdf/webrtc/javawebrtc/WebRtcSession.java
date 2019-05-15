@@ -1,13 +1,31 @@
 package by.fdf.webrtc.javawebrtc;
 
-import org.ice4j.Transport;
-import org.ice4j.ice.*;
-import org.jitsi.service.neomedia.*;
+import by.fdf.webrtc.javawebrtc.mapping.Stun;
+import by.fdf.webrtc.javawebrtc.mapping.StunAttribute;
+import by.fdf.webrtc.javawebrtc.mapping.StunResponse;
+import io.kaitai.struct.ByteBufferKaitaiStream;
+import org.bouncycastle.tls.DTLSServerProtocol;
+import org.bouncycastle.tls.DTLSTransport;
+import org.bouncycastle.tls.DatagramTransport;
+import org.bouncycastle.tls.UDPTransport;
+import org.jitsi.service.neomedia.DtlsControl;
+import org.jitsi.service.neomedia.MediaService;
+import org.jitsi.service.neomedia.RTPTranslator;
+import org.jitsi.service.neomedia.SrtpControlType;
 import org.jitsi.utils.MediaType;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.IOException;
+import java.net.*;
+import java.nio.charset.StandardCharsets;
+import java.util.AbstractMap;
+import java.util.AbstractMap.SimpleEntry;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * @author Dzmitry Fursevich
@@ -20,20 +38,30 @@ public class WebRtcSession implements Closeable {
     private Consumer<WebRtcSession> stateConsumer;
 
     private DtlsControl dtlsControl;
-    private Agent agent;
+    private DatagramSocket socket;
+    private String desc;
+
+    private Set<SimpleEntry<InetAddress, Integer>> connections = new HashSet<>();
 
     WebRtcSession(MediaService mediaService, RTPTranslator rtpTranslator, Consumer<WebRtcSession> stateConsumer) throws IOException {
         this.mediaService = mediaService;
         this.rtpTranslator = rtpTranslator;
         this.stateConsumer = stateConsumer;
         state = State.CREATED;
-        int rtpPort = 61234;
-        agent = new Agent();
-        IceMediaStream stream = agent.createMediaStream("video");
-        agent.createComponent(stream, Transport.UDP, rtpPort, rtpPort, rtpPort + 100);
+
+        socket = createSocket(41234);
+        new Thread(() -> run(socket)).start();
 
         dtlsControl = (DtlsControl) mediaService.createSrtpControl(SrtpControlType.DTLS_SRTP);
         dtlsControl.setRtcpmux(true);
+    }
+
+    private DatagramSocket createSocket(int port) throws SocketException {
+        try {
+            return new DatagramSocket(port);
+        } catch (BindException e) {
+            return createSocket(port + 1);
+        }
     }
 
     public String createOffer() throws Exception {
@@ -43,7 +71,7 @@ public class WebRtcSession implements Closeable {
         dtlsControl.setSetup(DtlsControl.Setup.ACTPASS);
 //        dtlsControl.start(MediaType.VIDEO);
 
-        return SdpUtils.createOffer(agent, dtlsControl);
+        return SdpUtils.createOffer(dtlsControl, socket.getLocalPort());
     }
 
     public String createAnswer() throws Exception {
@@ -53,15 +81,17 @@ public class WebRtcSession implements Closeable {
         dtlsControl.setSetup(DtlsControl.Setup.PASSIVE);
 //        dtlsControl.start(MediaType.VIDEO);
 
-        return SdpUtils.createAnswer(agent, dtlsControl);
+        return SdpUtils.createAnswer(dtlsControl, socket.getLocalPort());
     }
 
     public void setRemoteDescription(String desc) throws Exception {
+        this.desc = desc;
+
         if (state != State.CREATED) throw new IllegalStateException("Invalid session state: " + state);
 
         setState(State.REMOTE_DESCRIPTION_SET);
 
-        SdpUtils.parseSDP(agent, dtlsControl, desc);
+        SdpUtils.parseSDP(dtlsControl, desc);
     }
 
     public void connect() throws Exception {
@@ -69,23 +99,53 @@ public class WebRtcSession implements Closeable {
 
         setState(State.CONNECTED);
 
-        dtlsControl.start(MediaType.VIDEO);
-        agent.startConnectivityEstablishment();
-        while (agent.getState() == IceProcessingState.RUNNING) {
-            Thread.sleep(200);
-        }
+//        dtlsControl.start(MediaType.VIDEO);
 
-        IceMediaStream ims = agent.getStreams().get(0);
-        Component component = ims.getComponent(Component.RTP);
 
-        CandidatePair candidatePair = component.getSelectedPair();
+//        DatagramSocket socket = component.getComponentSocket();
 
-        VideoMediaStream vms = (VideoMediaStream) mediaService.createMediaStream(null, MediaType.VIDEO, dtlsControl);
-        vms.setDirection(MediaDirection.SENDRECV);
-        vms.setConnector(new DefaultStreamConnector(component.getSocket(), null, true));
-        vms.setTarget(new MediaStreamTarget(candidatePair.getRemoteCandidate().getTransportAddress(), candidatePair.getRemoteCandidate().getTransportAddress()));
-        vms.setRTPTranslator(rtpTranslator);
-        vms.start();
+//        System.out.println(candidatePair.getRemoteCandidate().getTransportAddress());
+//        socket.connect(candidatePair.getRemoteCandidate().getTransportAddress());
+////
+
+        System.out.println("Connection count: " + connections.size());
+
+//        final int mtu = 1500;
+//        DatagramTransport transport = new UDPTransport(socket, mtu);
+////
+//        MockDTLSServer server = new MockDTLSServer();
+//        DTLSServerProtocol serverProtocol = new DTLSServerProtocol();
+//
+//        DTLSTransport dtlsServer = serverProtocol.accept(server, transport);
+//
+//        byte[] buf = new byte[dtlsServer.getReceiveLimit()];
+//
+//        while (!socket.isClosed())
+//        {
+//            try
+//            {
+//                int length = dtlsServer.receive(buf, 0, buf.length, 60000);
+//                if (length >= 0)
+//                {
+//                    System.out.write(buf, 0, length);
+//                    dtlsServer.send(buf, 0, length);
+//                }
+//            }
+//            catch (SocketTimeoutException ste)
+//            {
+//            }
+//        }
+//
+//        dtlsServer.close();
+
+//        VideoMediaStream vms = (VideoMediaStream) mediaService.createMediaStream(null, MediaType.VIDEO, dtlsControl);
+//        vms.setDirection(MediaDirection.SENDRECV);
+//        vms.setConnector(new DefaultStreamConnector(component.getSocket(), null, true));
+//        vms.setTarget(new MediaStreamTarget(candidatePair.getRemoteCandidate().getTransportAddress(), candidatePair.getRemoteCandidate().getTransportAddress()));
+//        vms.setRTPTranslator(rtpTranslator);
+//        vms.start();
+//
+//        System.out.println(vms.getRemoteDataAddress());
     }
 
     public void close() {
@@ -107,4 +167,41 @@ public class WebRtcSession implements Closeable {
         CONNECTED,
         CLOSED
     }
+
+    public void run(DatagramSocket socket) {
+        byte[] buf = new byte[1024];
+        boolean running = true;
+        while (running) {
+            try {
+                DatagramPacket packet = new DatagramPacket(buf, buf.length);
+                socket.receive(packet);
+                Stun request = new Stun();
+                request.read(new ByteArrayInputStream(packet.getData()));
+
+                StunResponse stunResponse = new StunResponse(
+                        request.getCookie(),
+                        request.getTransactionId(),
+                        packet.getAddress(),
+                        packet.getPort(),
+                        request.getAttributes().stream().filter(a -> a.getType() == 0x0006).findFirst().map(StunAttribute::getValue).map(bytes -> new String(bytes, StandardCharsets.US_ASCII)).orElse(""),
+                        "Xb5tRHohOwJbXqkBNo7iYNmp");
+
+                ByteArrayOutputStream os = new ByteArrayOutputStream();
+                stunResponse.write(os);
+                byte[] bytes = os.toByteArray();
+                socket.send(new DatagramPacket(bytes, bytes.length, packet.getAddress(), packet.getPort()));
+
+                connections.add(new SimpleEntry<>(packet.getAddress(), packet.getPort()));
+
+                System.out.println("Connection count: " + connections.size());
+
+
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        socket.close();
+    }
 }
+

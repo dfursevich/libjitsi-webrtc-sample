@@ -8,6 +8,7 @@ import org.bouncycastle.tls.DTLSServerProtocol;
 import org.bouncycastle.tls.DTLSTransport;
 import org.bouncycastle.tls.DatagramTransport;
 import org.bouncycastle.tls.UDPTransport;
+import org.bouncycastle.tls.crypto.impl.bc.BcTlsCrypto;
 import org.jitsi.service.neomedia.DtlsControl;
 import org.jitsi.service.neomedia.MediaService;
 import org.jitsi.service.neomedia.RTPTranslator;
@@ -20,6 +21,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
 import java.util.AbstractMap;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.HashSet;
@@ -40,6 +42,7 @@ public class WebRtcSession implements Closeable {
     private DtlsControl dtlsControl;
     private DatagramSocket socket;
     private String desc;
+    boolean dtls = false;
 
     private Set<SimpleEntry<InetAddress, Integer>> connections = new HashSet<>();
 
@@ -108,7 +111,7 @@ public class WebRtcSession implements Closeable {
 //        socket.connect(candidatePair.getRemoteCandidate().getTransportAddress());
 ////
 
-        System.out.println("Connection count: " + connections.size());
+//        System.out.println("Connection count: " + connections.size());
 
 //        final int mtu = 1500;
 //        DatagramTransport transport = new UDPTransport(socket, mtu);
@@ -150,6 +153,7 @@ public class WebRtcSession implements Closeable {
 
     public void close() {
         setState(State.CLOSED);
+        socket.close();
     }
 
     public State getState() {
@@ -169,12 +173,14 @@ public class WebRtcSession implements Closeable {
     }
 
     public void run(DatagramSocket socket) {
-        byte[] buf = new byte[1024];
         boolean running = true;
-        while (running) {
+        while (!socket.isClosed()) {
             try {
-                DatagramPacket packet = new DatagramPacket(buf, buf.length);
+                int mtu = 1500;
+                byte[] data = new byte[mtu];
+                DatagramPacket packet = new DatagramPacket(data, data.length);
                 socket.receive(packet);
+
                 Stun request = new Stun();
                 request.read(new ByteArrayInputStream(packet.getData()));
 
@@ -191,17 +197,56 @@ public class WebRtcSession implements Closeable {
                 byte[] bytes = os.toByteArray();
                 socket.send(new DatagramPacket(bytes, bytes.length, packet.getAddress(), packet.getPort()));
 
-                connections.add(new SimpleEntry<>(packet.getAddress(), packet.getPort()));
+                System.out.println("Accepting connection from " + packet.getAddress().getHostAddress());
+                socket.connect(packet.getAddress(), packet.getPort());
+//
+//                connections.add(new SimpleEntry<>(packet.getAddress(), packet.getPort()));
+//
+//                System.out.println("Connection count: " + connections.size());
 
-                System.out.println("Connection count: " + connections.size());
-
-
+                if (!dtls) {
+                    dtls = true;
+                    new Thread(() -> runDtls(socket)).start();
+                }
 
             } catch (Exception e) {
                 e.printStackTrace();
             }
         }
         socket.close();
+    }
+
+    public void runDtls(DatagramSocket socket) {
+        try {
+            DatagramTransport transport = new UDPTransport(socket, 1500);
+
+            MockDTLSServer server = new MockDTLSServer();
+            DTLSServerProtocol serverProtocol = new DTLSServerProtocol();
+            DTLSTransport dtlsServer = serverProtocol.accept(server, transport);
+
+            byte[] buf = new byte[dtlsServer.getReceiveLimit()];
+
+//            while (!socket.isClosed())
+//            {
+//                try
+//                {
+//                    int length = dtlsServer.receive(buf, 0, buf.length, 60000);
+//                    if (length >= 0)
+//                    {
+//                        System.out.write(buf, 0, length);
+//                        dtlsServer.send(buf, 0, length);
+//                    }
+//                }
+//                catch (SocketTimeoutException ste)
+//                {
+//                }
+//            }
+//
+//            dtlsServer.close();
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 }
 

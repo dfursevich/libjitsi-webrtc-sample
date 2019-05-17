@@ -173,7 +173,8 @@ public class SdpUtils {
         attributes.add(SdpUtils.attributeField("ice-ufrag", "ImjS"));
         attributes.add(SdpUtils.attributeField("ice-pwd", "Xb5tRHohOwJbXqkBNo7iYNmp"));
         attributes.add(SdpUtils.attributeField("candidate", "udpcandidate 1 udp 1078862079 192.168.7.226 " + port + " typ host"));
-        attributes.add(SdpUtils.attributeField("fingerprint", dtlsControl.getLocalFingerprintHashFunction() + " " + dtlsControl.getLocalFingerprint()));
+        attributes.add(SdpUtils.attributeField("fingerprint", "sha-256 CA:2E:0C:52:D8:ED:49:86:8C:0B:60:13:28:49:ED:83:6A:74:3F:22:7D:E0:D4:91:3C:51:B1:53:33:B5:CF:7F"));
+//        attributes.add(SdpUtils.attributeField("fingerprint", "sha-256 1D:C3:70:FB:90:C0:65:AF:24:85:1F:F6:02:1B:9B:32:D2:39:47:9F:25:AE:ED:61:10:82:BA:48:D2:7A:AC:22"));
         return answerSdp.toString();
     }
 
